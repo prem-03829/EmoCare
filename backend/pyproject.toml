@@ -16,4 +16,6 @@ dependencies = [
     "transformers>=5.2.0",
     "tzdata>=2024.1",
     "uvicorn>=0.41.0",
+    "sentence-transformers>=5.2.3",
+    "rapidfuzz>=3.14.3",
 ]
