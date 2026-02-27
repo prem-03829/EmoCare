@@ -30,25 +30,57 @@ TONE_MAP = {
 # ────────────────────────────────────────────────
 # Helper: Resolve text user_id → real UUID
 # ────────────────────────────────────────────────
+# def resolve_user_uuid(text_user_id: str) -> str:
+#     """
+#     Convert text user_id ("prem", "test123") → real UUID from users.id
+#     Raises ValueError if user not found
+#     """
+#     res = (
+#         supabase.table("users")
+#         .select("id")
+#         .eq(
+#             "username", text_user_id
+#         )  # ← change to your column name: username or user_id
+#         .limit(1)
+#         .execute()
+#     )
+
+#     if not res.data:
+#         raise ValueError(f"No user found with user_id: {text_user_id}")
+
+#     return res.data[0]["id"]
+
 def resolve_user_uuid(text_user_id: str) -> str:
     """
     Convert text user_id ("prem", "test123") → real UUID from users.id
-    Raises ValueError if user not found
+    Auto-creates user if not found (demo mode)
     """
+
+    # 1️⃣ Try to find existing user
     res = (
         supabase.table("users")
         .select("id")
-        .eq(
-            "username", text_user_id
-        )  # ← change to your column name: username or user_id
+        .eq("username", text_user_id)  # keep same column name
         .limit(1)
         .execute()
     )
 
-    if not res.data:
-        raise ValueError(f"No user found with user_id: {text_user_id}")
+    if res.data:
+        return res.data[0]["id"]
 
-    return res.data[0]["id"]
+    # 2️⃣ If not found → create new user
+    new_user = (
+        supabase.table("users")
+        .insert({
+            "username": text_user_id
+        })
+        .execute()
+    )
+
+    if not new_user.data:
+        raise ValueError("Failed to create new demo user")
+
+    return new_user.data[0]["id"]
 
 
 def get_recent_history(text_user_id: str):
@@ -256,7 +288,6 @@ Reply naturally like someone who genuinely cares.
         "typing_delay": typing_delay,
     }
 
-
 def get_full_history(text_user_id: str):
     user_uuid = resolve_user_uuid(text_user_id)
 
@@ -264,7 +295,7 @@ def get_full_history(text_user_id: str):
         supabase.table("conversations")
         .select("id")
         .eq("user_id", user_uuid)
-        .order("started_at", desc=True)
+        .order("started_at", desc=True)   # ✅ this is correct
         .limit(1)
         .execute()
     )
@@ -278,19 +309,22 @@ def get_full_history(text_user_id: str):
         supabase.table("messages")
         .select("sender, content, created_at")
         .eq("conversation_id", conversation_id)
-        .order("created_at", asc=True)
+        .order("created_at", desc=False)  # 🔥 FIXED HERE
         .execute()
     )
 
     return response.data if response.data else []
 
-
 def get_daily_mood(text_user_id: str):
     user_uuid = resolve_user_uuid(text_user_id)
 
     conv_response = (
-        supabase.table("conversations").select("id").eq("user_id", user_uuid).execute()
+        supabase.table("conversations")
+        .select("id")
+        .eq("user_id", user_uuid)
+        .execute()
     )
+
     if not conv_response.data:
         return {"message": "No mood data available."}
 
@@ -300,8 +334,7 @@ def get_daily_mood(text_user_id: str):
 
     emotions_data = (
         supabase.table("messages")
-        .select("created_at, message_emotions.emotion, message_emotions.confidence")
-        .join("message_emotions", "messages.id", "message_emotions.message_id")
+        .select("created_at, message_emotions(emotion, confidence)")
         .in_("conversation_id", conv_ids)
         .eq("sender", "user")
         .gte("created_at", f"{today}T00:00:00")
@@ -316,8 +349,12 @@ def get_daily_mood(text_user_id: str):
     confidences = []
 
     for row in emotions_data.data:
-        emotions_today.append(row["message_emotions"]["emotion"])
-        confidences.append(row["message_emotions"]["confidence"])
+        if row.get("message_emotions"):
+            emotions_today.append(row["message_emotions"]["emotion"])
+            confidences.append(row["message_emotions"]["confidence"])
+
+    if not emotions_today:
+        return {"message": "No mood data for today."}
 
     dominant_emotion = max(set(emotions_today), key=emotions_today.count)
     avg_confidence = sum(confidences) / len(confidences) if confidences else 0
@@ -329,13 +366,16 @@ def get_daily_mood(text_user_id: str):
         "total_messages": len(emotions_today),
     }
 
-
 def get_emotion_timeline(text_user_id: str):
     user_uuid = resolve_user_uuid(text_user_id)
 
     conv_response = (
-        supabase.table("conversations").select("id").eq("user_id", user_uuid).execute()
+        supabase.table("conversations")
+        .select("id")
+        .eq("user_id", user_uuid)
+        .execute()
     )
+
     if not conv_response.data:
         return {"message": "No emotion data available."}
 
@@ -343,8 +383,7 @@ def get_emotion_timeline(text_user_id: str):
 
     response = (
         supabase.table("messages")
-        .select("created_at, message_emotions.emotion")
-        .join("message_emotions", "messages.id", "message_emotions.message_id")
+        .select("created_at, message_emotions(emotion)")
         .in_("conversation_id", conv_ids)
         .eq("sender", "user")
         .execute()
@@ -356,19 +395,27 @@ def get_emotion_timeline(text_user_id: str):
     daily_emotions = defaultdict(list)
 
     for row in response.data:
+        if not row.get("message_emotions"):
+            continue
+
         date = (
             datetime.fromisoformat(row["created_at"].replace("Z", ""))
             .date()
             .isoformat()
         )
-        daily_emotions[date].append(row["message_emotions"]["emotion"])
+
+        daily_emotions[date].append(
+            row["message_emotions"]["emotion"]
+        )
 
     timeline = []
+
     for date, emotions in daily_emotions.items():
-        dominant = max(set(emotions), key=emotions.count) if emotions else "neutral"
+        dominant = max(set(emotions), key=emotions.count)
         timeline.append({"date": date, "dominant_emotion": dominant})
 
     timeline.sort(key=lambda x: x["date"])
+
     return timeline
 
 
@@ -379,8 +426,12 @@ def get_weekly_insight(text_user_id: str):
     week_ago = today - timedelta(days=7)
 
     conv_response = (
-        supabase.table("conversations").select("id").eq("user_id", user_uuid).execute()
+        supabase.table("conversations")
+        .select("id")
+        .eq("user_id", user_uuid)
+        .execute()
     )
+
     if not conv_response.data:
         return {"message": "No weekly data available."}
 
@@ -388,8 +439,7 @@ def get_weekly_insight(text_user_id: str):
 
     response = (
         supabase.table("messages")
-        .select("created_at, message_emotions.emotion, message_emotions.confidence")
-        .join("message_emotions", "messages.id", "message_emotions.message_id")
+        .select("created_at, message_emotions(emotion, confidence)")
         .in_("conversation_id", conv_ids)
         .eq("sender", "user")
         .gte("created_at", week_ago.isoformat())
@@ -403,27 +453,42 @@ def get_weekly_insight(text_user_id: str):
     weekly_confidences = []
 
     for row in response.data:
-        weekly_emotions.append(row["message_emotions"]["emotion"])
-        weekly_confidences.append(row["message_emotions"]["confidence"])
+        if not row.get("message_emotions"):
+            continue
+
+        weekly_emotions.append(
+            row["message_emotions"]["emotion"]
+        )
+        weekly_confidences.append(
+            row["message_emotions"]["confidence"]
+        )
+
+    if not weekly_emotions:
+        return {"message": "No activity in last 7 days."}
 
     emotion_counts = Counter(weekly_emotions)
-    emotion_summary = "\n".join([f"{e}: {c}" for e, c in emotion_counts.items()])
-
-    avg_confidence = (
-        sum(weekly_confidences) / len(weekly_confidences) if weekly_confidences else 0
+    emotion_summary = "\n".join(
+        [f"{e}: {c}" for e, c in emotion_counts.items()]
     )
 
-    prompt = f"""
-You are an emotional wellness AI analyst.
+    avg_confidence = (
+        sum(weekly_confidences) / len(weekly_confidences)
+        if weekly_confidences else 0
+    )
 
-User emotional data for the last 7 days:
+    prompt = f"""You are an emotional wellness AI analyst.
+
+User emotion frequency (last 7 days):
 {emotion_summary}
 
-Average emotional intensity score: {round(avg_confidence, 3)}
+Average emotional intensity: {round(avg_confidence, 3)}
 
-Generate a compassionate weekly emotional insight.
-Keep it supportive and reflective.
-Do not introduce yourself.
+Tasks:
+1. Identify dominant emotional pattern.
+2. Suggest one actionable habit improvement.
+3. Offer one encouraging reflection.
+
+Keep it compassionate and concise.
 """
 
     insight = generate_llm_response(prompt)
@@ -435,36 +500,24 @@ Do not introduce yourself.
     }
 
 
-def create_journal_entry(text_user_id: str, entry: str):
+def generate_auto_journal(text_user_id: str):
     user_uuid = resolve_user_uuid(text_user_id)
 
-    emotion_data = detect_emotion(entry)
-    emotion = emotion_data["emotion"]
-    confidence = emotion_data["confidence"]
+    messages = supabase.table("messages")\
+        .select("content")\
+        .eq("sender", "user")\
+        .execute()
+
+    all_text = " ".join([m["content"] for m in messages.data])
 
     prompt = f"""
-You are an emotional reflection assistant.
+    Based on the following chat history, generate a compassionate journal-style summary:
 
-User journal entry:
-{entry}
+    {all_text}
 
-Detected emotion: {emotion}
+    Keep it reflective and emotionally intelligent.
+    """
 
-Generate a concise (4-5 sentence) supportive journal reflection.
-Keep it grounded and emotionally intelligent.
-Do not introduce yourself.
-"""
+    summary = generate_llm_response(prompt)
 
-    ai_summary = generate_llm_response(prompt)
-
-    supabase.table("journal_entries").insert(
-        {
-            "user_id": user_uuid,  # ← real UUID
-            "entry": entry,
-            "emotion": emotion,
-            "confidence": confidence,
-            "ai_summary": ai_summary,
-        }
-    ).execute()
-
-    return {"emotion": emotion, "confidence": confidence, "ai_summary": ai_summary}
+    return {"auto_journal": summary}
