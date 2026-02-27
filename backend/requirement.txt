@@ -22,6 +22,7 @@ huggingface_hub==1.4.1
 hyperframe==6.1.0
 idna==3.11
 Jinja2==3.1.6
+joblib==1.5.3
 llvmlite==0.46.0
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
@@ -49,11 +50,15 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-multipart==0.0.22
 PyYAML==6.0.3
+RapidFuzz==3.14.3
 realtime==2.28.0
 regex==2026.2.19
 requests==2.32.5
 rich==14.3.3
 safetensors==0.7.0
+scikit-learn==1.8.0
+scipy==1.17.1
+sentence-transformers==5.2.3
 sentencepiece==0.2.1
 setuptools==82.0.0
 shellingham==1.5.4
@@ -67,6 +72,7 @@ supabase-auth==2.28.0
 supabase-functions==2.28.0
 sympy==1.14.0
 tenacity==9.1.4
+threadpoolctl==3.6.0
 tiktoken==0.12.0
 tokenizers==0.22.2
 torch==2.10.0
