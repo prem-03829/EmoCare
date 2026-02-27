@@ -138,26 +138,7 @@ def generate_reply(user_id: str, message: str):
 
     logger.info(f"User: {user_id} | Message: {message}")
 
-    user_word_count = len(message.split())
-
-    if user_word_count <= 5:
-        length_instruction = "Reply in 1 short sentence."
-    elif user_word_count <= 20:
-        length_instruction = "Reply in 1-2 short sentences."
-    else:
-        length_instruction = "Reply in 2-4 sentences, still under 80 words."
-
-    # 1️⃣ Detect emotion
-    emotion_data = detect_emotion(message)
-    emotion = emotion_data["emotion"]
-    confidence = emotion_data["confidence"]
-
-    logger.info(f"Detected emotion: {emotion}")
-
-    tone_instruction = TONE_MAP.get(emotion, "Be emotionally present and natural.")
-    logger.info(f"Tone selected: {tone_instruction}")
-
-    # 🔴 Crisis check first
+    # 🔴 STEP 1: Crisis check FIRST
     if is_sensitive(message):
         crisis_reply = (
             "I'm really concerned about what you're feeling.\n\n"
@@ -180,6 +161,28 @@ def generate_reply(user_id: str, message: str):
             "crisis_detected": True,
             "typing_delay": typing_delay,
         }
+
+    # ✅ Only after crisis check → continue normal flow
+
+    user_word_count = len(message.split())
+
+    if user_word_count <= 5:
+        length_instruction = "Reply in 1 short sentence."
+    elif user_word_count <= 20:
+        length_instruction = "Reply in 1-2 short sentences."
+    else:
+        length_instruction = "Reply in 2-4 sentences, still under 80 words."
+
+    # Detect emotion
+    emotion_data = detect_emotion(message)
+    emotion = emotion_data["emotion"]
+    confidence = emotion_data["confidence"]
+
+    logger.info(f"Detected emotion: {emotion}")
+
+    tone_instruction = TONE_MAP.get(emotion, "Be emotionally present and natural.")
+
+    # 🔴 Crisis check first
 
     # 3️⃣ Fetch last few messages (now formatted similarly to old structure)
     history = get_recent_history(user_id)[-3:]

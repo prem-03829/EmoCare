@@ -1,6 +1,6 @@
 from rapidfuzz import fuzz
 
-THRESHOLD = 60
+THRESHOLD = 80
 
 DANGER_PHRASES = [
     "suicide",
