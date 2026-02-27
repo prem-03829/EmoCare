@@ -1007,31 +1007,8 @@ class _ChatScreenState extends State<ChatScreen>
                 ],
               ),
               const SizedBox(height: 18),
-              ListTile(
-                leading: Icon(
-                  _isLoggedIn ? Icons.verified_user : Icons.login,
-                  color: Colors.white70,
-                ),
-                title: Text(
-                  _isLoggedIn
-                      ? (_userEmail ?? "Logged in")
-                      : "Login / Create Account",
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                subtitle: Text(
-                  _isLoggedIn
-                      ? "You are signed in"
-                      : "Optional: continue in guest mode",
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-                onTap: _isLoggedIn ? null : _openAuthSheet,
-              ),
-              if (_isLoggedIn)
-                _drawerItem(Icons.logout, "Logout", onTap: _logout),
               _drawerItem(Icons.add_comment, "New Chat", onTap: _startNewChat),
               _drawerItem(Icons.history, "Previous Chats", onTap: _openPreviousChatsPicker),
-              _drawerItem(Icons.search, "Search Chats"),
-              _drawerItem(Icons.star_border, "Favorites"),
               _drawerItem(
                 Icons.psychology,
                 "Mood Insights",
@@ -1062,6 +1039,27 @@ class _ChatScreenState extends State<ChatScreen>
                 },
               ),
               _drawerItem(Icons.info_outline, "About"),
+              ListTile(
+                leading: Icon(
+                  _isLoggedIn ? Icons.verified_user : Icons.login,
+                  color: Colors.white70,
+                ),
+                title: Text(
+                  _isLoggedIn
+                      ? (_userEmail ?? "Logged in")
+                      : "Login / Create Account",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                subtitle: Text(
+                  _isLoggedIn
+                      ? "You are signed in"
+                      : "Optional: continue in guest mode",
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+                onTap: _isLoggedIn ? null : _openAuthSheet,
+              ),
+              if (_isLoggedIn)
+                _drawerItem(Icons.logout, "Logout", onTap: _logout),
               const SizedBox(height: 18),
             ],
           ),
