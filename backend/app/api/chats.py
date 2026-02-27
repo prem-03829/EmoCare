@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from app.services.chat_service import (
     generate_reply,
@@ -12,16 +12,23 @@ from app.services.chat_service import (
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+# ────────────────────────────────────────────────
+# Request Models (POST bodies)
+# ────────────────────────────────────────────────
+
+
 class ChatRequest(BaseModel):
+    user_id: str  # ← required: send "prem", "test1", etc.
     message: str
 
 
 class JournalRequest(BaseModel):
+    user_id: str  # ← required
     entry: str
 
 
 # ────────────────────────────────────────────────
-# Chat endpoints (no auth)
+# Chat endpoints
 # ────────────────────────────────────────────────
 
 
@@ -32,55 +39,54 @@ def send_chat_message(req: ChatRequest):
     Send a message and get AI reply + emotion info
     No authentication required
     """
-    # For testing: you can hardcode a user_id or pass it in the body
-    # Here we use a fixed test user (change it to whatever you want)
-    test_user_id = "11111111-1111-1111-1111-111111111111"
-
-    return generate_reply(test_user_id, req.message)
+    return generate_reply(req.user_id, req.message)
 
 
 @router.get("/history")
-def get_chat_history():
+def get_chat_history(
+    user_id: str = Query(..., description="User identifier (e.g. prem, test1)")
+):
     """
-    Get full chat history for the test user
+    Get full chat history for the specified user
     No authentication required
     """
-    test_user_id = "11111111-1111-1111-1111-111111111111"
-    return get_full_history(test_user_id)
+    return get_full_history(user_id)
 
 
 @router.get("/mood/today")
-def get_daily_mood_today():
+def get_daily_mood_today(
+    user_id: str = Query(..., description="User identifier (e.g. prem, test1)")
+):
     """
-    Get today's mood summary for the test user
+    Get today's mood summary for the specified user
     """
-    test_user_id = "11111111-1111-1111-1111-111111111111"
-    return get_daily_mood(test_user_id)
+    return get_daily_mood(user_id)
 
 
 @router.get("/timeline")
-def get_emotion_timeline():
+def get_emotion_timeline(
+    user_id: str = Query(..., description="User identifier (e.g. prem, test1)")
+):
     """
-    Get day-by-day emotion timeline for the test user
+    Get day-by-day emotion timeline for the specified user
     """
-    test_user_id = "11111111-1111-1111-1111-111111111111"
-    return get_emotion_timeline(test_user_id)
+    return get_emotion_timeline(user_id)
 
 
 @router.get("/weekly-insight")
-def get_weekly_insight():
+def get_weekly_insight(
+    user_id: str = Query(..., description="User identifier (e.g. prem, test1)")
+):
     """
-    Get weekly emotional insight for the test user
+    Get weekly emotional insight for the specified user
     """
-    test_user_id = "11111111-1111-1111-1111-111111111111"
-    return get_weekly_insight(test_user_id)
+    return get_weekly_insight(user_id)
 
 
 @router.post("/journal")
 def create_journal_entry_endpoint(req: JournalRequest):
     """
-    Create a journal entry for the test user
+    Create a journal entry for the specified user
     No authentication required
     """
-    test_user_id = "11111111-1111-1111-1111-111111111111"
-    return create_journal_entry(test_user_id, req.entry)
+    return create_journal_entry(req.user_id, req.entry)

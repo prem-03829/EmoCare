@@ -4,9 +4,7 @@ from app.core.logger import logger
 from app.core.supabase_client import supabase
 from app.core.config import settings
 from datetime import datetime, timedelta
-from collections import defaultdict
-from collections import Counter
-from app.services.crisis_detector import is_crisis
+from collections import defaultdict, Counter
 from app.utils.safety import is_sensitive
 import random
 
@@ -29,17 +27,37 @@ TONE_MAP = {
 }
 
 
-def is_crisis(message: str) -> bool:
-    message_lower = message.lower()
-    return any(keyword in message_lower for keyword in CRISIS_KEYWORDS)
+# ────────────────────────────────────────────────
+# Helper: Resolve text user_id → real UUID
+# ────────────────────────────────────────────────
+def resolve_user_uuid(text_user_id: str) -> str:
+    """
+    Convert text user_id ("prem", "test123") → real UUID from users.id
+    Raises ValueError if user not found
+    """
+    res = (
+        supabase.table("users")
+        .select("id")
+        .eq(
+            "username", text_user_id
+        )  # ← change to your column name: username or user_id
+        .limit(1)
+        .execute()
+    )
+
+    if not res.data:
+        raise ValueError(f"No user found with user_id: {text_user_id}")
+
+    return res.data[0]["id"]
 
 
-def get_recent_history(user_id: str):
-    # Get the most recent conversation for this user
+def get_recent_history(text_user_id: str):
+    user_uuid = resolve_user_uuid(text_user_id)
+
     conv_response = (
         supabase.table("conversations")
         .select("id")
-        .eq("user_id", user_id)
+        .eq("user_id", user_uuid)  # ← now UUID
         .order("started_at", desc=True)
         .limit(1)
         .execute()
@@ -50,7 +68,6 @@ def get_recent_history(user_id: str):
 
     conversation_id = conv_response.data[0]["id"]
 
-    # Get last N messages from that conversation
     response = (
         supabase.table("messages")
         .select("sender, content, created_at")
@@ -63,7 +80,6 @@ def get_recent_history(user_id: str):
     if not response.data:
         return []
 
-    # reverse so oldest comes first + format like old structure
     history = []
     for row in reversed(response.data):
         history.append(
@@ -77,12 +93,15 @@ def get_recent_history(user_id: str):
     return history
 
 
-def save_chat(user_id, message, reply, emotion, confidence):
-    # ── 1. Get or create conversation ───────────────────────────────────────
+def save_chat(
+    text_user_id: str, message: str, reply: str, emotion: str, confidence: float
+):
+    user_uuid = resolve_user_uuid(text_user_id)
+
     conv_response = (
         supabase.table("conversations")
         .select("id")
-        .eq("user_id", user_id)
+        .eq("user_id", user_uuid)
         .order("started_at", desc=True)
         .limit(1)
         .execute()
@@ -92,13 +111,14 @@ def save_chat(user_id, message, reply, emotion, confidence):
         conversation_id = conv_response.data[0]["id"]
     else:
         conv_insert = (
-            supabase.table("conversations").insert({"user_id": user_id}).execute()
+            supabase.table("conversations")
+            .insert({"user_id": user_uuid})  # ← UUID
+            .execute()
         )
         conversation_id = conv_insert.data[0]["id"]
 
     now = datetime.utcnow().isoformat()
 
-    # ── 2. Insert user message ──────────────────────────────────────────────
     user_msg = (
         supabase.table("messages")
         .insert(
@@ -113,32 +133,26 @@ def save_chat(user_id, message, reply, emotion, confidence):
     )
     user_msg_id = user_msg.data[0]["id"]
 
-    # ── 3. Insert emotion for user message ──────────────────────────────────
     if emotion:
         supabase.table("message_emotions").insert(
             {"message_id": user_msg_id, "emotion": emotion, "confidence": confidence}
         ).execute()
 
-    # ── 4. Insert bot reply ─────────────────────────────────────────────────
-    bot_msg = (
-        supabase.table("messages")
-        .insert(
-            {
-                "conversation_id": conversation_id,
-                "sender": "bot",
-                "content": reply,
-                "created_at": now,  # same timestamp ≈ (in reality you'd use trigger or slight delay)
-            }
-        )
-        .execute()
-    )
+    supabase.table("messages").insert(
+        {
+            "conversation_id": conversation_id,
+            "sender": "bot",
+            "content": reply,
+            "created_at": now,
+        }
+    ).execute()
 
 
-def generate_reply(user_id: str, message: str):
+def generate_reply(text_user_id: str, message: str):
+    user_uuid = resolve_user_uuid(text_user_id)
 
-    logger.info(f"User: {user_id} | Message: {message}")
+    logger.info(f"User: {text_user_id} (UUID: {user_uuid}) | Message: {message}")
 
-    # 🔴 STEP 1: Crisis check FIRST
     if is_sensitive(message):
         crisis_reply = (
             "I'm really concerned about what you're feeling.\n\n"
@@ -149,7 +163,7 @@ def generate_reply(user_id: str, message: str):
             "You matter. Talking to someone can really help."
         )
 
-        save_chat(user_id, message, crisis_reply, "crisis", 1.0)
+        save_chat(text_user_id, message, crisis_reply, "crisis", 1.0)
 
         word_count = len(crisis_reply.split())
         typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
@@ -162,8 +176,6 @@ def generate_reply(user_id: str, message: str):
             "typing_delay": typing_delay,
         }
 
-    # ✅ Only after crisis check → continue normal flow
-
     user_word_count = len(message.split())
 
     if user_word_count <= 5:
@@ -173,7 +185,6 @@ def generate_reply(user_id: str, message: str):
     else:
         length_instruction = "Reply in 2-4 sentences, still under 80 words."
 
-    # Detect emotion
     emotion_data = detect_emotion(message)
     emotion = emotion_data["emotion"]
     confidence = emotion_data["confidence"]
@@ -182,12 +193,8 @@ def generate_reply(user_id: str, message: str):
 
     tone_instruction = TONE_MAP.get(emotion, "Be emotionally present and natural.")
 
-    # 🔴 Crisis check first
+    history = get_recent_history(text_user_id)[-3:]
 
-    # 3️⃣ Fetch last few messages (now formatted similarly to old structure)
-    history = get_recent_history(user_id)[-3:]
-
-    # 4️⃣ Build conversation context
     conversation_context = ""
     for chat in history:
         if chat["message"]:
@@ -204,7 +211,6 @@ def generate_reply(user_id: str, message: str):
 
     random_style = random.choice(style_variations)
 
-    # 5️⃣ Build prompt with memory
     prompt = f"""You are a warm, emotionally intelligent friend having a real conversation.
 
 Previous conversation:
@@ -233,13 +239,11 @@ Guidelines:
 Reply naturally like someone who genuinely cares.
 """
 
-    # 6️⃣ Generate LLM response
     reply = generate_llm_response(prompt)
 
     logger.info("LLM response generated")
 
-    # 7️⃣ Save chat (user message + bot reply + emotion on user message)
-    save_chat(user_id, message, reply, emotion, confidence)
+    save_chat(text_user_id, message, reply, emotion, confidence)
 
     word_count = len(reply.split())
     typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
@@ -253,11 +257,13 @@ Reply naturally like someone who genuinely cares.
     }
 
 
-def get_full_history(user_id: str):
+def get_full_history(text_user_id: str):
+    user_uuid = resolve_user_uuid(text_user_id)
+
     conv_response = (
         supabase.table("conversations")
         .select("id")
-        .eq("user_id", user_id)
+        .eq("user_id", user_uuid)
         .order("started_at", desc=True)
         .limit(1)
         .execute()
@@ -279,29 +285,16 @@ def get_full_history(user_id: str):
     return response.data if response.data else []
 
 
-def get_daily_mood(user_id: str):
-    # We'll join messages → message_emotions
-    response = (
-        supabase.table("messages")
-        .select(
-            "messages.created_at, message_emotions.emotion, message_emotions.confidence"
-        )
-        .join("message_emotions", "messages.id", "message_emotions.message_id")
-        .eq("messages.sender", "user")  # only user messages
-        .eq("messages.user_id", user_id)  # wait — no user_id in messages!
-        # Problem: messages don't have user_id → need to go through conversation
-        # For simplicity we filter via recent conversations, but this query needs adjustment
+def get_daily_mood(text_user_id: str):
+    user_uuid = resolve_user_uuid(text_user_id)
+
+    conv_response = (
+        supabase.table("conversations").select("id").eq("user_id", user_uuid).execute()
     )
-
-    # Alternative (safer but two steps):
-    conv_ids = (
-        supabase.table("conversations").select("id").eq("user_id", user_id).execute()
-    ).data
-
-    if not conv_ids:
+    if not conv_response.data:
         return {"message": "No mood data available."}
 
-    conv_ids_list = [c["id"] for c in conv_ids]
+    conv_ids = [c["id"] for c in conv_response.data]
 
     today = datetime.utcnow().date().isoformat()
 
@@ -309,7 +302,7 @@ def get_daily_mood(user_id: str):
         supabase.table("messages")
         .select("created_at, message_emotions.emotion, message_emotions.confidence")
         .join("message_emotions", "messages.id", "message_emotions.message_id")
-        .in_("conversation_id", conv_ids_list)
+        .in_("conversation_id", conv_ids)
         .eq("sender", "user")
         .gte("created_at", f"{today}T00:00:00")
         .lt("created_at", f"{today}T23:59:59")
@@ -327,7 +320,7 @@ def get_daily_mood(user_id: str):
         confidences.append(row["message_emotions"]["confidence"])
 
     dominant_emotion = max(set(emotions_today), key=emotions_today.count)
-    avg_confidence = sum(confidences) / len(confidences)
+    avg_confidence = sum(confidences) / len(confidences) if confidences else 0
 
     return {
         "date": today,
@@ -337,10 +330,11 @@ def get_daily_mood(user_id: str):
     }
 
 
-def get_emotion_timeline(user_id: str):
-    # Similar join logic — getting all user messages with emotions
+def get_emotion_timeline(text_user_id: str):
+    user_uuid = resolve_user_uuid(text_user_id)
+
     conv_response = (
-        supabase.table("conversations").select("id").eq("user_id", user_id).execute()
+        supabase.table("conversations").select("id").eq("user_id", user_uuid).execute()
     )
     if not conv_response.data:
         return {"message": "No emotion data available."}
@@ -371,21 +365,21 @@ def get_emotion_timeline(user_id: str):
 
     timeline = []
     for date, emotions in daily_emotions.items():
-        dominant = max(set(emotions), key=emotions.count)
+        dominant = max(set(emotions), key=emotions.count) if emotions else "neutral"
         timeline.append({"date": date, "dominant_emotion": dominant})
 
     timeline.sort(key=lambda x: x["date"])
-
     return timeline
 
 
-def get_weekly_insight(user_id: str):
-    # Similar approach — fetch last 7 days user messages + emotions
+def get_weekly_insight(text_user_id: str):
+    user_uuid = resolve_user_uuid(text_user_id)
+
     today = datetime.utcnow()
     week_ago = today - timedelta(days=7)
 
     conv_response = (
-        supabase.table("conversations").select("id").eq("user_id", user_id).execute()
+        supabase.table("conversations").select("id").eq("user_id", user_uuid).execute()
     )
     if not conv_response.data:
         return {"message": "No weekly data available."}
@@ -415,7 +409,9 @@ def get_weekly_insight(user_id: str):
     emotion_counts = Counter(weekly_emotions)
     emotion_summary = "\n".join([f"{e}: {c}" for e, c in emotion_counts.items()])
 
-    avg_confidence = sum(weekly_confidences) / len(weekly_confidences)
+    avg_confidence = (
+        sum(weekly_confidences) / len(weekly_confidences) if weekly_confidences else 0
+    )
 
     prompt = f"""
 You are an emotional wellness AI analyst.
@@ -433,13 +429,15 @@ Do not introduce yourself.
     insight = generate_llm_response(prompt)
 
     return {
-        "weekly_emotion_counts": dict(emotion_counts),  # serializable
+        "weekly_emotion_counts": dict(emotion_counts),
         "average_confidence": round(avg_confidence, 3),
         "weekly_insight": insight,
     }
 
 
-def create_journal_entry(user_id: str, entry: str):
+def create_journal_entry(text_user_id: str, entry: str):
+    user_uuid = resolve_user_uuid(text_user_id)
+
     emotion_data = detect_emotion(entry)
     emotion = emotion_data["emotion"]
     confidence = emotion_data["confidence"]
@@ -461,7 +459,7 @@ Do not introduce yourself.
 
     supabase.table("journal_entries").insert(
         {
-            "user_id": user_id,
+            "user_id": user_uuid,  # ← real UUID
             "entry": entry,
             "emotion": emotion,
             "confidence": confidence,
