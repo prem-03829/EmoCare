@@ -1,65 +1,15 @@
-# from fastapi import APIRouter
-# from pydantic import BaseModel
-# from app.services.chat_service import generate_reply
-# from pydantic import BaseModel
-# from app.core.auth import get_current_user
-
-# router = APIRouter()
-
-# class ChatRequest(BaseModel):
-#     message: str
-
-
-# class JournalRequest(BaseModel):
-#     user_id: str
-#     entry: str
-
-
-# @router.post("/",summary="Generate emotion-aware AI reply",description="Accepts user text and returns an empathetic AI response along with detected emotion and confidence score.")
-# def chat(req: ChatRequest):
-#     return generate_reply(req.user_id, req.message)
-
-
-# @router.get("/history/{user_id}")
-# def chat_history(user_id: str):
-#     from app.services.chat_service import get_full_history
-#     return get_full_history(user_id)
-
-
-# @router.get("/mood/{user_id}")
-# def daily_mood(user_id: str):
-#     from app.services.chat_service import get_daily_mood
-#     return get_daily_mood(user_id)
-
-# @router.get("/timeline/{user_id}")
-# def emotion_timeline(user_id: str):
-#     from app.services.chat_service import get_emotion_timeline
-#     return get_emotion_timeline(user_id)
-
-# @router.get("/weekly-insight/{user_id}")
-# def weekly_insight(user_id: str):
-#     from app.services.chat_service import get_weekly_insight
-#     return get_weekly_insight(user_id)
-
-
-# @router.post("/journal")
-# def journal(req: JournalRequest):
-#     from app.services.chat_service import create_journal_entry
-#     return create_journal_entry(req.user_id, req.entry)
-
-
-# @router.post("/chat")
-# def chat(req: ChatRequest, user=Depends(get_current_user)):
-#     user_id = user["sub"]
-
-
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
-from app.services.chat_service import generate_reply
-from app.core.auth import get_current_user
+from app.services.chat_service import (
+    generate_reply,
+    get_full_history,
+    get_daily_mood,
+    get_emotion_timeline,
+    get_weekly_insight,
+    create_journal_entry,
+)
 
-router = APIRouter()
+router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 class ChatRequest(BaseModel):
@@ -67,45 +17,70 @@ class ChatRequest(BaseModel):
 
 
 class JournalRequest(BaseModel):
-    user_id: str
     entry: str
 
 
-@router.post("/")
-def chat(req: ChatRequest, user=Depends(get_current_user)):
-    user_id = user["sub"]  # from JWT
-    return generate_reply(user_id, req.message)
+# ────────────────────────────────────────────────
+# Chat endpoints (no auth)
+# ────────────────────────────────────────────────
 
 
-@router.get("/history/{user_id}")
-def chat_history(user_id: str):
-    from app.services.chat_service import get_full_history
-    return get_full_history(user_id)
+@router.post("")
+@router.post("/send")
+def send_chat_message(req: ChatRequest):
+    """
+    Send a message and get AI reply + emotion info
+    No authentication required
+    """
+    # For testing: you can hardcode a user_id or pass it in the body
+    # Here we use a fixed test user (change it to whatever you want)
+    test_user_id = "11111111-1111-1111-1111-111111111111"
+
+    return generate_reply(test_user_id, req.message)
 
 
-@router.get("/mood/{user_id}")
-def daily_mood(user_id: str):
-    from app.services.chat_service import get_daily_mood
-    return get_daily_mood(user_id)
+@router.get("/history")
+def get_chat_history():
+    """
+    Get full chat history for the test user
+    No authentication required
+    """
+    test_user_id = "11111111-1111-1111-1111-111111111111"
+    return get_full_history(test_user_id)
 
-@router.get("/timeline/{user_id}")
-def emotion_timeline(user_id: str):
-    from app.services.chat_service import get_emotion_timeline
-    return get_emotion_timeline(user_id)
 
-@router.get("/weekly-insight/{user_id}")
-def weekly_insight(user_id: str):
-    from app.services.chat_service import get_weekly_insight
-    return get_weekly_insight(user_id)
+@router.get("/mood/today")
+def get_daily_mood_today():
+    """
+    Get today's mood summary for the test user
+    """
+    test_user_id = "11111111-1111-1111-1111-111111111111"
+    return get_daily_mood(test_user_id)
+
+
+@router.get("/timeline")
+def get_emotion_timeline():
+    """
+    Get day-by-day emotion timeline for the test user
+    """
+    test_user_id = "11111111-1111-1111-1111-111111111111"
+    return get_emotion_timeline(test_user_id)
+
+
+@router.get("/weekly-insight")
+def get_weekly_insight():
+    """
+    Get weekly emotional insight for the test user
+    """
+    test_user_id = "11111111-1111-1111-1111-111111111111"
+    return get_weekly_insight(test_user_id)
 
 
 @router.post("/journal")
-def journal(req: JournalRequest):
-    from app.services.chat_service import create_journal_entry
-    return create_journal_entry(req.user_id, req.entry)
-
-
-@router.post("/chat")
-def chat_auth(req: ChatRequest, user=Depends(get_current_user)):
-    user_id = user["sub"]
-    return generate_reply(user_id, req.message)
+def create_journal_entry_endpoint(req: JournalRequest):
+    """
+    Create a journal entry for the test user
+    No authentication required
+    """
+    test_user_id = "11111111-1111-1111-1111-111111111111"
+    return create_journal_entry(test_user_id, req.entry)
