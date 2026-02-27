@@ -180,12 +180,125 @@ def save_chat(
     ).execute()
 
 
+# def generate_reply(text_user_id: str, message: str):
+#     user_uuid = resolve_user_uuid(text_user_id)
+
+#     logger.info(f"User: {text_user_id} (UUID: {user_uuid}) | Message: {message}")
+
+#     if is_sensitive(message):
+#         crisis_reply = (
+#             "I'm really concerned about what you're feeling.\n\n"
+#             "You don’t have to go through this alone. "
+#             "If you're thinking about harming yourself, please reach out for help right now:\n\n"
+#             "📞 AASRA: +91-9820466726\n"
+#             "📞 iCALL: 9152987821\n\n"
+#             "You matter. Talking to someone can really help."
+#         )
+
+#         save_chat(text_user_id, message, crisis_reply, "crisis", 1.0)
+
+#         word_count = len(crisis_reply.split())
+#         typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
+
+#         return {
+#             "reply": crisis_reply,
+#             "emotion": "crisis",
+#             "confidence": 1.0,
+#             "crisis_detected": True,
+#             "typing_delay": typing_delay,
+#         }
+
+#     user_word_count = len(message.split())
+
+#     if user_word_count <= 5:
+#         length_instruction = "Reply in 1 short sentence."
+#     elif user_word_count <= 20:
+#         length_instruction = "Reply in 1-2 short sentences."
+#     else:
+#         length_instruction = "Reply in 2-4 sentences, still under 80 words."
+
+#     emotion_data = detect_emotion(message)
+#     emotion = emotion_data["emotion"]
+#     confidence = emotion_data["confidence"]
+
+#     logger.info(f"Detected emotion: {emotion}")
+
+#     tone_instruction = TONE_MAP.get(emotion, "Be emotionally present and natural.")
+
+#     history = get_recent_history(text_user_id)[-3:]
+
+#     conversation_context = ""
+#     for chat in history:
+#         if chat["message"]:
+#             conversation_context += f"User said: {chat['message']}\n"
+#         if chat["reply"]:
+#             conversation_context += f"You replied: {chat['reply']}\n"
+
+#     style_variations = [
+#         "Be slightly casual and relaxed.",
+#         "Be emotionally warm but minimal.",
+#         "Be gentle and reflective.",
+#         "Be supportive but conversational.",
+#     ]
+
+#     random_style = random.choice(style_variations)
+
+#     prompt = f"""You are a warm, emotionally intelligent friend having a real conversation.
+
+# Previous conversation:
+# {conversation_context}
+
+# Current user message:
+# {message}
+
+# Guidelines:
+# {tone_instruction}
+# {random_style}
+# {length_instruction}
+# - Keep responses short (2-4 sentences, under 80 words).
+# - Sound natural, not like a therapist.
+# - Use simple everyday language.
+# - Use contractions (I'm, it's, that's).
+# - Avoid phrases like "It sounds like..."
+# - No long explanations.
+# - No motivational speeches.
+# - Do not give advice unless asked.
+# - Occasionally ask a gentle follow-up question.
+# - Occasionally use very short replies (1 sentence).
+# - Sometimes respond without a follow-up question.
+# - No introduction.
+
+# Reply naturally like someone who genuinely cares.
+# """
+
+#     reply = generate_llm_response(prompt)
+
+#     logger.info("LLM response generated")
+
+#     save_chat(text_user_id, message, reply, emotion, confidence)
+
+#     word_count = len(reply.split())
+#     typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
+
+#     return {
+#         "reply": reply,
+#         "emotion": emotion,
+#         "confidence": confidence,
+#         "crisis_detected": False,
+#         "typing_delay": typing_delay,
+#     }
 def generate_reply(text_user_id: str, message: str):
     user_uuid = resolve_user_uuid(text_user_id)
 
     logger.info(f"User: {text_user_id} (UUID: {user_uuid}) | Message: {message}")
 
-    if is_sensitive(message):
+    message_clean = message.strip()
+    message_lower = message_clean.lower()
+
+    # -------------------------
+    # 1️⃣ Crisis check
+    # -------------------------
+    if is_sensitive(message_clean):
         crisis_reply = (
             "I'm really concerned about what you're feeling.\n\n"
             "You don’t have to go through this alone. "
@@ -195,87 +308,105 @@ def generate_reply(text_user_id: str, message: str):
             "You matter. Talking to someone can really help."
         )
 
-        save_chat(text_user_id, message, crisis_reply, "crisis", 1.0)
-
-        word_count = len(crisis_reply.split())
-        typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
+        save_chat(text_user_id, message_clean, crisis_reply, "crisis", 1.0)
 
         return {
             "reply": crisis_reply,
             "emotion": "crisis",
             "confidence": 1.0,
             "crisis_detected": True,
-            "typing_delay": typing_delay,
+            "typing_delay": 1.5,
         }
 
-    user_word_count = len(message.split())
+    # -------------------------
+    # 2️⃣ Greeting shortcut
+    # -------------------------
+    GREETINGS = {"hi", "hello", "hey", "hii", "yo", "sup"}
 
-    if user_word_count <= 5:
-        length_instruction = "Reply in 1 short sentence."
-    elif user_word_count <= 20:
-        length_instruction = "Reply in 1-2 short sentences."
-    else:
-        length_instruction = "Reply in 2-4 sentences, still under 80 words."
+    if message_lower in GREETINGS:
+        reply = random.choice([
+            "hey 🙂 what's up?",
+            "hi! how's your day going?",
+            "hey… good to see you."
+        ])
 
-    emotion_data = detect_emotion(message)
+        save_chat(text_user_id, message_clean, reply, "neutral", 0.0)
+
+        return {
+            "reply": reply,
+            "emotion": "neutral",
+            "confidence": 0.0,
+            "crisis_detected": False,
+            "typing_delay": 0.8,
+        }
+
+    # -------------------------
+    # 3️⃣ Emotion detection (softer usage)
+    # -------------------------
+    emotion_data = detect_emotion(message_clean)
     emotion = emotion_data["emotion"]
     confidence = emotion_data["confidence"]
 
-    logger.info(f"Detected emotion: {emotion}")
+    # Only apply emotional tone if confidence strong
+    tone_hint = ""
+    if confidence > 0.65:
+        tone_hint = f"The user might be feeling {emotion}. Respond gently."
 
-    tone_instruction = TONE_MAP.get(emotion, "Be emotionally present and natural.")
-
-    history = get_recent_history(text_user_id)[-3:]
+    # -------------------------
+    # 4️⃣ Limit history (more natural)
+    # -------------------------
+    history = get_recent_history(text_user_id)[-2:]
 
     conversation_context = ""
     for chat in history:
-        if chat["message"]:
-            conversation_context += f"User said: {chat['message']}\n"
-        if chat["reply"]:
-            conversation_context += f"You replied: {chat['reply']}\n"
+        if chat.get("message"):
+            conversation_context += f"User: {chat['message']}\n"
+        if chat.get("reply"):
+            conversation_context += f"You: {chat['reply']}\n"
 
-    style_variations = [
-        "Be slightly casual and relaxed.",
-        "Be emotionally warm but minimal.",
-        "Be gentle and reflective.",
-        "Be supportive but conversational.",
+    # -------------------------
+    # 5️⃣ Random personality flavor
+    # -------------------------
+    personality_modes = [
+        "Be calm and grounded.",
+        "Be relaxed and casual.",
+        "Be gently supportive.",
+        "Be minimal and natural."
     ]
 
-    random_style = random.choice(style_variations)
+    random_style = random.choice(personality_modes)
 
-    prompt = f"""You are a warm, emotionally intelligent friend having a real conversation.
+    # -------------------------
+    # 6️⃣ Humanized prompt
+    # -------------------------
+    prompt = f"""
+You are a real close friend texting back naturally.
+
+You are NOT a therapist.
+You are NOT giving advice unless directly asked.
+You're just being there.
+
+{random_style}
+{tone_hint}
+
+Keep responses short.
+Use normal, everyday language.
+It's okay to be imperfect.
+Sometimes respond briefly.
+Don't over-analyze.
+Don't sound motivational.
 
 Previous conversation:
 {conversation_context}
 
-Current user message:
-{message}
+User: {message_clean}
 
-Guidelines:
-{tone_instruction}
-{random_style}
-{length_instruction}
-- Keep responses short (2-4 sentences, under 80 words).
-- Sound natural, not like a therapist.
-- Use simple everyday language.
-- Use contractions (I'm, it's, that's).
-- Avoid phrases like "It sounds like..."
-- No long explanations.
-- No motivational speeches.
-- Do not give advice unless asked.
-- Occasionally ask a gentle follow-up question.
-- Occasionally use very short replies (1 sentence).
-- Sometimes respond without a follow-up question.
-- No introduction.
-
-Reply naturally like someone who genuinely cares.
+Reply naturally.
 """
 
     reply = generate_llm_response(prompt)
 
-    logger.info("LLM response generated")
-
-    save_chat(text_user_id, message, reply, emotion, confidence)
+    save_chat(text_user_id, message_clean, reply, emotion, confidence)
 
     word_count = len(reply.split())
     typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
@@ -476,19 +607,19 @@ def get_weekly_insight(text_user_id: str):
         if weekly_confidences else 0
     )
 
-    prompt = f"""You are an emotional wellness AI analyst.
+    prompt = f"""
+You're reflecting on someone's emotional week.
 
-User emotion frequency (last 7 days):
+Emotion frequency (last 7 days):
 {emotion_summary}
 
 Average emotional intensity: {round(avg_confidence, 3)}
 
-Tasks:
-1. Identify dominant emotional pattern.
-2. Suggest one actionable habit improvement.
-3. Offer one encouraging reflection.
-
-Keep it compassionate and concise.
+Write a short, warm reflection.
+Sound human, not clinical.
+Keep it conversational.
+Offer one small suggestion naturally.
+Keep it under 5 sentences.
 """
 
     insight = generate_llm_response(prompt)
@@ -511,12 +642,15 @@ def generate_auto_journal(text_user_id: str):
     all_text = " ".join([m["content"] for m in messages.data])
 
     prompt = f"""
-    Based on the following chat history, generate a compassionate journal-style summary:
+You're writing a reflective journal summary based on these conversations.
 
-    {all_text}
+{all_text}
 
-    Keep it reflective and emotionally intelligent.
-    """
+Write it in a natural, thoughtful tone.
+Don't sound like a report.
+Sound like someone gently reflecting on their own week.
+Keep it 5–7 sentences.
+"""
 
     summary = generate_llm_response(prompt)
 
