@@ -23,7 +23,15 @@ def generate_llm_response(prompt: str) -> str:
             pool=30.0,
         )
         response = httpx.post(OLLAMA_URL, json=payload, timeout=timeout)
+        response.raise_for_status()
         data = response.json()
-        return data.get("response", "").strip()
+        if data.get("error"):
+            return f"LLM error: {data['error']}"
+
+        reply = (data.get("response") or "").strip()
+        if reply:
+            return reply
+
+        return "I'm here with you. Could you tell me a little more?"
     except Exception as e:
         return f"LLM error: {str(e)}"

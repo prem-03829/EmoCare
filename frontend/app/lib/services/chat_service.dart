@@ -32,9 +32,10 @@ class ChatReply {
 class ChatService {
   static const String _envBaseUrl =
       String.fromEnvironment("API_BASE_URL", defaultValue: "");
+  static const String _envApiUserId =
+      String.fromEnvironment("API_USER_ID", defaultValue: "prem");
   static String get baseUrl =>
       _envBaseUrl.isNotEmpty ? _envBaseUrl : "http://10.0.2.2:8000";
-  static const String _guestUserId = "11111111-1111-1111-1111-111111111111";
   static String? _accessToken;
   static String? _userId;
 
@@ -51,7 +52,11 @@ class ChatService {
     _userId = null;
   }
 
-  String get _effectiveUserId => _userId ?? _guestUserId;
+  String get _effectiveUserId {
+    if (_envApiUserId.isNotEmpty) return _envApiUserId;
+    if (_userId != null && _userId!.isNotEmpty) return _userId!;
+    return "prem";
+  }
   bool get _hasAuth => (_accessToken?.isNotEmpty ?? false) && (_userId?.isNotEmpty ?? false);
 
   Future<ChatReply> sendMessage(String message) async {
@@ -85,8 +90,11 @@ class ChatService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
+        final replyText = data["reply"]?.toString().trim();
         return ChatReply(
-          reply: data["reply"]?.toString() ?? "No reply",
+          reply: (replyText == null || replyText.isEmpty)
+              ? "I'm here with you. Could you tell me a little more?"
+              : replyText,
           emotion: data["emotion"]?.toString(),
           confidence: _toDouble(data["confidence"]),
         );
@@ -99,8 +107,14 @@ class ChatService {
   }
 
   Future<List<ChatMessage>> fetchHistory() async {
-    final response =
-        await http.get(Uri.parse("$baseUrl/chat/history?user_id=$_effectiveUserId"));
+    final headers = <String, String>{};
+    if (_hasAuth) {
+      headers["Authorization"] = "Bearer $_accessToken";
+    }
+    final response = await http.get(
+      Uri.parse("$baseUrl/chat/history?user_id=$_effectiveUserId"),
+      headers: headers,
+    );
 
     if (response.statusCode != 200) {
       throw Exception("Server error: ${response.statusCode}");
@@ -159,14 +173,18 @@ class ChatService {
       Future<http.StreamedResponse> sendTo(String path) async {
         final request = http.MultipartRequest("POST", Uri.parse("$baseUrl$path"));
         request.fields["user_id"] = _effectiveUserId;
+        if (_hasAuth) {
+          request.headers["Authorization"] = "Bearer $_accessToken";
+        }
         request.files.add(await http.MultipartFile.fromPath("file", audioFilePath));
         return request.send().timeout(const Duration(seconds: 180));
       }
 
-      var streamed = await sendTo("/voice/");
+      // Current backend mounts voice router at root.
+      var streamed = await sendTo("/");
       if (streamed.statusCode == 404) {
-        // Current backend mounts voice router at root.
-        streamed = await sendTo("/");
+        // Backward compatibility with older backend path.
+        streamed = await sendTo("/voice/");
       }
 
       final bodyBytes = await streamed.stream.toBytes().timeout(const Duration(seconds: 180));
@@ -174,8 +192,11 @@ class ChatService {
 
       if (streamed.statusCode == 200) {
         final data = jsonDecode(body);
+        final replyText = data["reply"]?.toString().trim();
         return ChatReply(
-          reply: data["reply"]?.toString() ?? "No reply",
+          reply: (replyText == null || replyText.isEmpty)
+              ? "I'm here with you. Could you tell me a little more?"
+              : replyText,
           emotion: data["emotion"]?.toString(),
           confidence: _toDouble(data["confidence"]),
         );
@@ -188,8 +209,14 @@ class ChatService {
   }
 
   Future<Map<String, dynamic>> fetchDailyMood() async {
-    final response =
-        await http.get(Uri.parse("$baseUrl/chat/mood/today?user_id=$_effectiveUserId"));
+    final headers = <String, String>{};
+    if (_hasAuth) {
+      headers["Authorization"] = "Bearer $_accessToken";
+    }
+    final response = await http.get(
+      Uri.parse("$baseUrl/chat/mood/today?user_id=$_effectiveUserId"),
+      headers: headers,
+    );
     if (response.statusCode != 200) {
       throw Exception("Server error: ${response.statusCode}");
     }
@@ -198,8 +225,14 @@ class ChatService {
   }
 
   Future<List<Map<String, dynamic>>> fetchEmotionTimeline() async {
-    final response =
-        await http.get(Uri.parse("$baseUrl/chat/timeline?user_id=$_effectiveUserId"));
+    final headers = <String, String>{};
+    if (_hasAuth) {
+      headers["Authorization"] = "Bearer $_accessToken";
+    }
+    final response = await http.get(
+      Uri.parse("$baseUrl/chat/timeline?user_id=$_effectiveUserId"),
+      headers: headers,
+    );
     if (response.statusCode != 200) {
       throw Exception("Server error: ${response.statusCode}");
     }
@@ -209,8 +242,14 @@ class ChatService {
   }
 
   Future<Map<String, dynamic>> fetchWeeklyInsight() async {
-    final response = await http
-        .get(Uri.parse("$baseUrl/chat/weekly-insight?user_id=$_effectiveUserId"));
+    final headers = <String, String>{};
+    if (_hasAuth) {
+      headers["Authorization"] = "Bearer $_accessToken";
+    }
+    final response = await http.get(
+      Uri.parse("$baseUrl/chat/weekly-insight?user_id=$_effectiveUserId"),
+      headers: headers,
+    );
     if (response.statusCode != 200) {
       throw Exception("Server error: ${response.statusCode}");
     }
