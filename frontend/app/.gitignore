@@ -1,0 +1,3 @@
+# Flutter project gitignore
+.dart_tool/
+build/
