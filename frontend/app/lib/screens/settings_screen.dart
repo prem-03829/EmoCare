@@ -23,8 +23,13 @@ class _SettingsScreenState
       appBar: AppBar(
         backgroundColor:
             const Color(0xFF0A1428),
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-        title: const Text("Settings"),
+        title: const Text(
+          "Settings",
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),

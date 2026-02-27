@@ -38,8 +38,13 @@ class _MoodInsightsScreenState extends State<MoodInsightsScreen> {
       backgroundColor: const Color(0xFF0A1428),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0A1428),
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
-        title: const Text("Mood Insights"),
+        title: const Text(
+          "Mood Insights",
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: FutureBuilder<_MoodInsightsData>(
         future: _future,
