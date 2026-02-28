@@ -1,3 +1,4 @@
+#pyproject.toml
 [project]
 name = "emotion-ai-backend"
 version = "0.1.0"
@@ -18,4 +19,6 @@ dependencies = [
     "uvicorn>=0.41.0",
     "sentence-transformers>=5.2.3",
     "rapidfuzz>=3.14.3",
+    "langdetect>=1.0.9",
+    "argostranslate>=1.11.0",
 ]

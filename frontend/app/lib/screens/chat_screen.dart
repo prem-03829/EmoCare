@@ -86,7 +86,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _sendMessage() async {
     final message = _textController.text.trim();
-    if (message.isEmpty || _isTyping || _isLoadingHistory || _isRecording) return;
+    if (message.isEmpty || _isLoadingHistory || _isRecording) return;
 
     setState(() {
       messages.add({
@@ -232,6 +232,38 @@ class _ChatScreenState extends State<ChatScreen>
     };
   }
 
+  Color _emotionColor(String? emotion) {
+    switch ((emotion ?? "").toLowerCase()) {
+      case "joy":
+        return const Color(0xFF7BD389);
+      case "sadness":
+        return const Color(0xFF5A7FFF);
+      case "anger":
+        return const Color(0xFFF77FBE);
+      case "fear":
+        return const Color(0xFFB892FF);
+      case "neutral":
+        return const Color(0xFF7FD1FF);
+      case "surprise":
+        return const Color(0xFFFFB26B);
+      case "crisis":
+        return const Color(0xFFFFB26B);
+      default:
+        return const Color(0xFF4FA3A5);
+    }
+  }
+
+  Map<String, dynamic>? _latestBotMood() {
+    for (int i = messages.length - 1; i >= 0; i--) {
+      final m = messages[i];
+      if (m["role"] == "bot" &&
+          (m["emotion"] != null || m["confidence"] != null)) {
+        return m;
+      }
+    }
+    return null;
+  }
+
   Future<void> _openPreviousChatsPicker() async {
     Navigator.pop(context);
     setState(() {
@@ -281,41 +313,150 @@ class _ChatScreenState extends State<ChatScreen>
                 ),
                 const SizedBox(height: 8),
                 Flexible(
-                  child: ListView.separated(
+                  child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: sessions.length,
-                    separatorBuilder: (_, __) => const Divider(
-                      color: Colors.white12,
-                      height: 1,
-                    ),
                     itemBuilder: (context, index) {
                       final s = sessions[index];
+                      final sessionMessages =
+                          s["messages"] as List<Map<String, dynamic>>;
                       final ts = s["startedAt"] as DateTime?;
                       final subtitle = ts == null
                           ? "Unknown time"
                           : "${ts.day.toString().padLeft(2, '0')}/${ts.month.toString().padLeft(2, '0')}  ${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}";
-                      return ListTile(
-                        leading: const Icon(Icons.chat_bubble_outline,
-                            color: Colors.white70),
-                        title: Text(
-                          s["title"] as String,
-                          style: const TextStyle(color: Colors.white),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      String? dominantEmotion;
+                      int emotionCount = 0;
+                      for (final msg in sessionMessages) {
+                        if (msg["role"] == "bot" &&
+                            msg["emotion"] != null &&
+                            msg["emotion"].toString().trim().isNotEmpty) {
+                          emotionCount++;
+                        }
+                      }
+                      if (emotionCount > 0) {
+                        final counts = <String, int>{};
+                        for (final msg in sessionMessages) {
+                          final e = msg["emotion"]?.toString();
+                          if (e == null || e.trim().isEmpty) continue;
+                          counts[e] = (counts[e] ?? 0) + 1;
+                        }
+                        if (counts.isNotEmpty) {
+                          dominantEmotion = counts.entries
+                              .reduce((a, b) => a.value >= b.value ? a : b)
+                              .key;
+                        }
+                      }
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
                         ),
-                        subtitle: Text(
-                          subtitle,
-                          style: const TextStyle(color: Colors.white60),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            Navigator.pop(context);
+                            setState(() {
+                              messages = List<Map<String, dynamic>>.from(
+                                  sessionMessages);
+                              _isTyping = false;
+                            });
+                            _scrollToBottom();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withOpacity(0.08),
+                                  const Color(0xFF5A7FFF).withOpacity(0.12),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.12),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.chat_bubble_outline,
+                                    color: Colors.white70,
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        s["title"] as String,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        subtitle,
+                                        style: const TextStyle(
+                                            color: Colors.white60,
+                                            fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      "${sessionMessages.length} msgs",
+                                      style: const TextStyle(
+                                          color: Colors.white60, fontSize: 12),
+                                    ),
+                                    if (dominantEmotion != null) ...[
+                                      const SizedBox(height: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: _emotionColor(dominantEmotion)
+                                              .withOpacity(0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color:
+                                                _emotionColor(dominantEmotion),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          dominantEmotion!.toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          setState(() {
-                            messages = List<Map<String, dynamic>>.from(
-                                s["messages"] as List<Map<String, dynamic>>);
-                            _isTyping = false;
-                          });
-                          _scrollToBottom();
-                        },
                       );
                     },
                   ),
@@ -565,6 +706,13 @@ class _ChatScreenState extends State<ChatScreen>
 
     final inputColor =
         isDark ? const Color(0xFF4C5AA6) : const Color(0xFFB8C3F6);
+    final latestMood = _latestBotMood();
+    final ringEmotion = latestMood?["emotion"]?.toString();
+    final ringConfidence = latestMood?["confidence"] is num
+        ? (latestMood?["confidence"] as num).toDouble()
+        : 0.35;
+    final ringColor = _emotionColor(ringEmotion);
+    final ringGlow = 10 + (18 * ringConfidence.clamp(0.0, 1.0));
 
     return Scaffold(
       key: _scaffoldKey,
@@ -878,7 +1026,11 @@ class _ChatScreenState extends State<ChatScreen>
                                   cursorColor:
                                       textColor,
                                   onChanged: (_) {
-                                    setState(() {});
+                                    setState(() {
+                                      if (_textController.text.trim().isNotEmpty) {
+                                        _isTyping = false;
+                                      }
+                                    });
                                   },
                                   minLines: 1,
                                   maxLines: 4,
@@ -902,14 +1054,42 @@ class _ChatScreenState extends State<ChatScreen>
                                 ),
                               ),
 
-                              IconButton(
-                                icon: Icon(
-                                  _isRecording ? Icons.stop_circle : Icons.mic,
-                                  color: _isRecording
-                                      ? const Color(0xFF8AA0FF)
-                                      : textColor,
+                              GestureDetector(
+                                onTap: _onMicPressed,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 320),
+                                  width: 46,
+                                  height: 46,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: _isRecording
+                                          ? const Color(0xFF8AA0FF)
+                                          : ringColor.withOpacity(0.9),
+                                      width: _isRecording ? 2.4 : 2.0,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: (_isRecording
+                                                ? const Color(0xFF8AA0FF)
+                                                : ringColor)
+                                            .withOpacity(0.45),
+                                        blurRadius:
+                                            _isRecording ? 24 : ringGlow,
+                                        spreadRadius: _isRecording ? 2 : 1,
+                                      ),
+                                    ],
+                                    color: isDark
+                                        ? Colors.white.withOpacity(0.08)
+                                        : Colors.black.withOpacity(0.05),
+                                  ),
+                                  child: Icon(
+                                    _isRecording ? Icons.stop_circle : Icons.mic,
+                                    color: _isRecording
+                                        ? const Color(0xFF8AA0FF)
+                                        : textColor,
+                                  ),
                                 ),
-                                onPressed: _onMicPressed,
                               ),
 
                               if (_textController.text
@@ -918,10 +1098,16 @@ class _ChatScreenState extends State<ChatScreen>
                                   _isTyping)
                                 IconButton(
                                   icon: Icon(
-                                    _isTyping ? Icons.hourglass_top_rounded : Icons.send,
-                                    color: _isTyping ? (isDark ? Colors.white54 : Colors.black45) : textColor,
+                                    _textController.text.trim().isNotEmpty
+                                        ? Icons.send
+                                        : Icons.hourglass_top_rounded,
+                                    color: _textController.text.trim().isNotEmpty
+                                        ? textColor
+                                        : (isDark ? Colors.white54 : Colors.black45),
                                   ),
-                                  onPressed: _isTyping ? null : _sendMessage,
+                                  onPressed: _textController.text.trim().isNotEmpty
+                                      ? _sendMessage
+                                      : null,
                                 ),
                             ],
                           ),
@@ -1007,31 +1193,8 @@ class _ChatScreenState extends State<ChatScreen>
                 ],
               ),
               const SizedBox(height: 18),
-              ListTile(
-                leading: Icon(
-                  _isLoggedIn ? Icons.verified_user : Icons.login,
-                  color: Colors.white70,
-                ),
-                title: Text(
-                  _isLoggedIn
-                      ? (_userEmail ?? "Logged in")
-                      : "Login / Create Account",
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                subtitle: Text(
-                  _isLoggedIn
-                      ? "You are signed in"
-                      : "Optional: continue in guest mode",
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
-                ),
-                onTap: _isLoggedIn ? null : _openAuthSheet,
-              ),
-              if (_isLoggedIn)
-                _drawerItem(Icons.logout, "Logout", onTap: _logout),
               _drawerItem(Icons.add_comment, "New Chat", onTap: _startNewChat),
               _drawerItem(Icons.history, "Previous Chats", onTap: _openPreviousChatsPicker),
-              _drawerItem(Icons.search, "Search Chats"),
-              _drawerItem(Icons.star_border, "Favorites"),
               _drawerItem(
                 Icons.psychology,
                 "Mood Insights",
@@ -1062,6 +1225,27 @@ class _ChatScreenState extends State<ChatScreen>
                 },
               ),
               _drawerItem(Icons.info_outline, "About"),
+              ListTile(
+                leading: Icon(
+                  _isLoggedIn ? Icons.verified_user : Icons.login,
+                  color: Colors.white70,
+                ),
+                title: Text(
+                  _isLoggedIn
+                      ? (_userEmail ?? "Logged in")
+                      : "Login / Create Account",
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                subtitle: Text(
+                  _isLoggedIn
+                      ? "You are signed in"
+                      : "Optional: continue in guest mode",
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+                onTap: _isLoggedIn ? null : _openAuthSheet,
+              ),
+              if (_isLoggedIn)
+                _drawerItem(Icons.logout, "Logout", onTap: _logout),
               const SizedBox(height: 18),
             ],
           ),
