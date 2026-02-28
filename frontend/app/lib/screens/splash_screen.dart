@@ -305,105 +305,85 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Widget _buildActionButtons() {
+    const buttonHeight = 52.0;
+    final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Primary button
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF5A7FFF),
-                  Color(0xFF6B8CFF),
-                  Color(0xFF7A9CFF),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF5A7FFF).withOpacity(0.50),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                  spreadRadius: 2,
+          Expanded(
+            child: SizedBox(
+              height: buttonHeight,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (!_showBreathing) {
+                    _startBreathing();
+                  } else {
+                    _openChat();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5A7FFF),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(26),
+                  ),
                 ),
-              ],
-            ),
-            child: ElevatedButton(
-              onPressed: () {
-                if (!_showBreathing) {
-                  _startBreathing();
-                } else {
-                  _openChat();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 38, vertical: 18),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26)),
-                elevation: 0,
-              ),
-              child: Text(
-                !_showBreathing
-                    ? "Continue"
-                    : (_completedCycles >= _targetCycles
-                        ? "Start Chat"
-                        : "Skip To Chat"),
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.3,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    !_showBreathing
+                        ? "Continue"
+                        : (_completedCycles >= _targetCycles
+                            ? "Start Chat"
+                            : "Skip To Chat"),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-
-          const SizedBox(
-              width:
-                  40), // ← increased from 16 to 24 → more distance between buttons
-
-          // Secondary glass button
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.18 : 0.10),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(26),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                  decoration: BoxDecoration(
+          const SizedBox(width: 12),
+          Expanded(
+            child: SizedBox(
+              height: buttonHeight,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(26),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Material(
                     color: Colors.white.withOpacity(isDark ? 0.06 : 0.09),
-                    borderRadius: BorderRadius.circular(26),
-                    border: Border.all(
-                      color: (isDark ? Colors.white : Colors.black)
-                          .withOpacity(isDark ? 0.18 : 0.13),
-                      width: 1.1,
-                    ),
-                  ),
-                  child: Text(
-                    _showBreathing ? "End Exercise" : "Skip",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white70 : Colors.black54,
-                      letterSpacing: 0.2,
+                    child: InkWell(
+                      onTap: _openChat,
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(26),
+                          border: Border.all(
+                            color: (isDark ? Colors.white : Colors.black)
+                                .withOpacity(isDark ? 0.18 : 0.13),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _showBreathing ? "End Exercise" : "Skip",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: secondaryTextColor,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -414,7 +394,6 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
-
   Widget _animatedBubble({
     required double size,
     required Color color,
