@@ -1,4 +1,7 @@
+#chatservice
 from app.api.emotion import detect_emotion
+from app.services.language_detector import detect_language
+from app.services.translation import translate
 from app.api.ollama_client import generate_llm_response
 from app.core.logger import logger
 from app.core.supabase_client import supabase
@@ -26,29 +29,6 @@ TONE_MAP = {
     "fear": "Be reassuring and steady.",
 }
 
-
-# ────────────────────────────────────────────────
-# Helper: Resolve text user_id → real UUID
-# ────────────────────────────────────────────────
-# def resolve_user_uuid(text_user_id: str) -> str:
-#     """
-#     Convert text user_id ("prem", "test123") → real UUID from users.id
-#     Raises ValueError if user not found
-#     """
-#     res = (
-#         supabase.table("users")
-#         .select("id")
-#         .eq(
-#             "username", text_user_id
-#         )  # ← change to your column name: username or user_id
-#         .limit(1)
-#         .execute()
-#     )
-
-#     if not res.data:
-#         raise ValueError(f"No user found with user_id: {text_user_id}")
-
-#     return res.data[0]["id"]
 
 def resolve_user_uuid(text_user_id: str) -> str:
     """
@@ -126,7 +106,7 @@ def get_recent_history(text_user_id: str):
 
 
 def save_chat(
-    text_user_id: str, message: str, reply: str, emotion: str, confidence: float
+    text_user_id: str, user_message: str, reply: str, emotion: str, confidence: float
 ):
     user_uuid = resolve_user_uuid(text_user_id)
 
@@ -157,7 +137,7 @@ def save_chat(
             {
                 "conversation_id": conversation_id,
                 "sender": "user",
-                "content": message,
+                "content": user_message,
                 "created_at": now,
             }
         )
@@ -184,9 +164,26 @@ def save_chat(
 #     user_uuid = resolve_user_uuid(text_user_id)
 
 #     logger.info(f"User: {text_user_id} (UUID: {user_uuid}) | Message: {message}")
+    
+#     message_clean = message.strip()
+#     message_lower = message_clean.lower()
+#         # -------------------------
+#     # 🌍 0️⃣ Language Detection + Translation
+#     # -------------------------
+#     lang = detect_language(message_clean)
+#     logger.info(f"Detected language: {lang}")
 
-#     if is_sensitive(message):
-#         crisis_reply = (
+#     if lang != "en":
+#         message_en = translate(message_clean, lang, "en")
+#     else:
+#         message_en = message_clean
+
+# # -------------------------
+# # 1️⃣ Crisis check
+# # -------------------------
+#     if is_sensitive(message_en):
+
+#         crisis_reply_en = (
 #             "I'm really concerned about what you're feeling.\n\n"
 #             "You don’t have to go through this alone. "
 #             "If you're thinking about harming yourself, please reach out for help right now:\n\n"
@@ -195,93 +192,127 @@ def save_chat(
 #             "You matter. Talking to someone can really help."
 #         )
 
-#         save_chat(text_user_id, message, crisis_reply, "crisis", 1.0)
+#         # 🌍 Translate crisis reply if needed
+#         if lang in ["hi", "mr"]:
+#             final_reply = translate(crisis_reply_en, "en", lang)
+#         else:
+#             final_reply = crisis_reply_en
 
-#         word_count = len(crisis_reply.split())
-#         typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
+#         save_chat(text_user_id, message_clean, final_reply, "crisis", 1.0)
 
-#         return {
-#             "reply": crisis_reply,
+#         return{
+#             "reply": final_reply,
 #             "emotion": "crisis",
 #             "confidence": 1.0,
 #             "crisis_detected": True,
-#             "typing_delay": typing_delay,
+#             "typing_delay": 1.5,
 #         }
 
-#     user_word_count = len(message.split())
+#     # -------------------------
+#     # 2️⃣ Greeting shortcut
+#     # -------------------------
+#     GREETINGS = {"hi", "hello", "hey", "hii", "yo", "sup"}
 
-#     if user_word_count <= 5:
-#         length_instruction = "Reply in 1 short sentence."
-#     elif user_word_count <= 20:
-#         length_instruction = "Reply in 1-2 short sentences."
-#     else:
-#         length_instruction = "Reply in 2-4 sentences, still under 80 words."
+#     if message_lower in GREETINGS:
+#         reply = random.choice([
+#             "hey 🙂 what's up?",
+#             "hi! how's your day going?",
+#             "hey… good to see you."
+#         ])
 
-#     emotion_data = detect_emotion(message)
+#         if lang in ["hi", "mr"]:
+#             final_reply = translate(reply, "en", lang)
+#         else:
+#             final_reply = reply
+
+#         save_chat(text_user_id, message_clean, final_reply, "neutral", 0.0)
+
+#         return {
+#             "reply": final_reply,
+#             "emotion": "neutral",
+#             "confidence": 0.0,
+#             "crisis_detected": False,
+#             "typing_delay": 0.8,
+#         }
+
+#     # -------------------------
+#     # 3️⃣ Emotion detection (softer usage)
+#     # -------------------------
+#     emotion_data = detect_emotion(message_en)
 #     emotion = emotion_data["emotion"]
 #     confidence = emotion_data["confidence"]
 
-#     logger.info(f"Detected emotion: {emotion}")
+#     # Only apply emotional tone if confidence strong
+#     tone_hint = ""
+#     if confidence > 0.65:
+#         tone_hint = f"The user might be feeling {emotion}. Respond gently."
 
-#     tone_instruction = TONE_MAP.get(emotion, "Be emotionally present and natural.")
-
-#     history = get_recent_history(text_user_id)[-3:]
+#     # -------------------------
+#     # 4️⃣ Limit history (more natural)
+#     # -------------------------
+#     history = get_recent_history(text_user_id)[-2:]
 
 #     conversation_context = ""
 #     for chat in history:
-#         if chat["message"]:
-#             conversation_context += f"User said: {chat['message']}\n"
-#         if chat["reply"]:
-#             conversation_context += f"You replied: {chat['reply']}\n"
+#         if chat.get("message"):
+#             conversation_context += f"User: {chat['message']}\n"
+#         if chat.get("reply"):
+#             conversation_context += f"You: {chat['reply']}\n"
 
-#     style_variations = [
-#         "Be slightly casual and relaxed.",
-#         "Be emotionally warm but minimal.",
-#         "Be gentle and reflective.",
-#         "Be supportive but conversational.",
+#     # -------------------------
+#     # 5️⃣ Random personality flavor
+#     # -------------------------
+#     personality_modes = [
+#         "Be calm and grounded.",
+#         "Be relaxed and casual.",
+#         "Be gently supportive.",
+#         "Be minimal and natural."
 #     ]
 
-#     random_style = random.choice(style_variations)
+#     random_style = random.choice(personality_modes)
 
-#     prompt = f"""You are a warm, emotionally intelligent friend having a real conversation.
+#     # -------------------------
+#     # 6️⃣ Humanized prompt
+#     # -------------------------
+#     prompt = f"""
+# You are a real close friend texting back naturally.
+
+# You are NOT a therapist.
+# You are NOT giving advice unless directly asked.
+# You're just being there.
+
+# {random_style}
+# {tone_hint}
+
+# Keep responses short.
+# Use normal, everyday language.
+# It's okay to be imperfect.
+# Sometimes respond briefly.
+# Don't over-analyze.
+# Don't sound motivational.
 
 # Previous conversation:
 # {conversation_context}
 
-# Current user message:
-# {message}
+# User: {message_en}
 
-# Guidelines:
-# {tone_instruction}
-# {random_style}
-# {length_instruction}
-# - Keep responses short (2-4 sentences, under 80 words).
-# - Sound natural, not like a therapist.
-# - Use simple everyday language.
-# - Use contractions (I'm, it's, that's).
-# - Avoid phrases like "It sounds like..."
-# - No long explanations.
-# - No motivational speeches.
-# - Do not give advice unless asked.
-# - Occasionally ask a gentle follow-up question.
-# - Occasionally use very short replies (1 sentence).
-# - Sometimes respond without a follow-up question.
-# - No introduction.
-
-# Reply naturally like someone who genuinely cares.
+# Reply naturally.
 # """
 
 #     reply = generate_llm_response(prompt)
+#         # 🌍 Translate reply back if needed
+#     if lang != "en":
+#         final_reply = translate(reply, "en", lang)
+#     else:
+#         final_reply = reply
 
-#     logger.info("LLM response generated")
-
-#     save_chat(text_user_id, message, reply, emotion, confidence)
+#     save_chat(text_user_id, message_clean, final_reply, emotion, confidence)
 
 #     word_count = len(reply.split())
 #     typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
 
 #     return {
-#         "reply": reply,
+#         "reply": final_reply,
 #         "emotion": emotion,
 #         "confidence": confidence,
 #         "crisis_detected": False,
@@ -291,15 +322,59 @@ def generate_reply(text_user_id: str, message: str):
     user_uuid = resolve_user_uuid(text_user_id)
 
     logger.info(f"User: {text_user_id} (UUID: {user_uuid}) | Message: {message}")
-
+    
     message_clean = message.strip()
     message_lower = message_clean.lower()
+
+    # 🌍 Force emotion for strong Hindi/Marathi keywords (hackathon-safe layer)
+    lower_original = message_clean.lower()
+    forced_emotion = None
+
+    # Hindi / Marathi sadness
+    if any(word in lower_original for word in [
+        "दुखी", "उदास", "अच्छा नहीं लग", "मन खराब",
+        "वाईट वाटत", "बरं वाटत नाही"
+    ]):
+        forced_emotion = "sadness"
+
+    # Hindi / Marathi anger
+    elif any(word in lower_original for word in [
+        "गुस्सा", "चिढ़", "परेशान",
+        "राग", "चिडचिड"
+    ]):
+        forced_emotion = "anger"
+
+    # Hindi / Marathi fear
+    elif any(word in lower_original for word in [
+        "डर", "घबराहट", "चिंता",
+        "भीती", "काळजी"
+    ]):
+        forced_emotion = "fear"
+
+    # -------------------------
+    # 🌍 0️⃣ Language Detection + Translation
+    # -------------------------
+    lang = detect_language(message_clean)
+        # 🔎 Fix Hindi/Marathi confusion
+    if lang == "hi":
+        # Simple Marathi keyword check
+        if any(word in message_clean.lower() for word in [
+            "मला", "नाही", "आहे", "वाटत", "बरं"
+        ]):
+            lang = "mr"
+    logger.info(f"Detected language: {lang}")
+
+    if lang != "en":
+        message_en = translate(message_clean, lang, "en")
+    else:
+        message_en = message_clean
 
     # -------------------------
     # 1️⃣ Crisis check
     # -------------------------
-    if is_sensitive(message_clean):
-        crisis_reply = (
+    if is_sensitive(message_en):
+
+        crisis_reply_en = (
             "I'm really concerned about what you're feeling.\n\n"
             "You don’t have to go through this alone. "
             "If you're thinking about harming yourself, please reach out for help right now:\n\n"
@@ -308,10 +383,15 @@ def generate_reply(text_user_id: str, message: str):
             "You matter. Talking to someone can really help."
         )
 
-        save_chat(text_user_id, message_clean, crisis_reply, "crisis", 1.0)
+        if lang in ["hi", "mr"]:
+            final_reply = translate(crisis_reply_en, "en", lang)
+        else:
+            final_reply = crisis_reply_en
+
+        save_chat(text_user_id, message_clean, final_reply, "crisis", 1.0)
 
         return {
-            "reply": crisis_reply,
+            "reply": final_reply,
             "emotion": "crisis",
             "confidence": 1.0,
             "crisis_detected": True,
@@ -330,10 +410,15 @@ def generate_reply(text_user_id: str, message: str):
             "hey… good to see you."
         ])
 
-        save_chat(text_user_id, message_clean, reply, "neutral", 0.0)
+        if lang in ["hi", "mr"]:
+            final_reply = translate(reply, "en", lang)
+        else:
+            final_reply = reply
+
+        save_chat(text_user_id, message_clean, final_reply, "neutral", 0.0)
 
         return {
-            "reply": reply,
+            "reply": final_reply,
             "emotion": "neutral",
             "confidence": 0.0,
             "crisis_detected": False,
@@ -341,19 +426,23 @@ def generate_reply(text_user_id: str, message: str):
         }
 
     # -------------------------
-    # 3️⃣ Emotion detection (softer usage)
+    # 3️⃣ Emotion detection
     # -------------------------
-    emotion_data = detect_emotion(message_clean)
-    emotion = emotion_data["emotion"]
-    confidence = emotion_data["confidence"]
+    emotion_data = detect_emotion(message_en)
 
-    # Only apply emotional tone if confidence strong
+    if forced_emotion:
+        emotion = forced_emotion
+        confidence = 0.95
+    else:
+        emotion = emotion_data["emotion"]
+        confidence = emotion_data["confidence"]
+
     tone_hint = ""
     if confidence > 0.65:
         tone_hint = f"The user might be feeling {emotion}. Respond gently."
 
     # -------------------------
-    # 4️⃣ Limit history (more natural)
+    # 4️⃣ Limit history
     # -------------------------
     history = get_recent_history(text_user_id)[-2:]
 
@@ -365,7 +454,7 @@ def generate_reply(text_user_id: str, message: str):
             conversation_context += f"You: {chat['reply']}\n"
 
     # -------------------------
-    # 5️⃣ Random personality flavor
+    # 5️⃣ Personality flavor
     # -------------------------
     personality_modes = [
         "Be calm and grounded.",
@@ -377,7 +466,7 @@ def generate_reply(text_user_id: str, message: str):
     random_style = random.choice(personality_modes)
 
     # -------------------------
-    # 6️⃣ Humanized prompt
+    # 6️⃣ Prompt
     # -------------------------
     prompt = f"""
 You are a real close friend texting back naturally.
@@ -399,25 +488,32 @@ Don't sound motivational.
 Previous conversation:
 {conversation_context}
 
-User: {message_clean}
+User: {message_en}
 
 Reply naturally.
 """
 
     reply = generate_llm_response(prompt)
 
-    save_chat(text_user_id, message_clean, reply, emotion, confidence)
+    if lang != "en":
+        final_reply = translate(reply, "en", lang)
+    else:
+        final_reply = reply
+
+    save_chat(text_user_id, message_clean, final_reply, emotion, confidence)
 
     word_count = len(reply.split())
     typing_delay = min(max(word_count * 0.04, 0.8), 3.0)
 
     return {
-        "reply": reply,
+        "reply": final_reply,
         "emotion": emotion,
         "confidence": confidence,
         "crisis_detected": False,
         "typing_delay": typing_delay,
     }
+
+
 
 def get_full_history(text_user_id: str):
     user_uuid = resolve_user_uuid(text_user_id)
