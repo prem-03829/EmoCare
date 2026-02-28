@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'chat_screen.dart';
+import 'chat_screen.dart'; // ← assuming this exists
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -93,7 +93,8 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = isDark ? const Color.fromARGB(255, 37, 34, 71) : Colors.white;
+    final bgColor =
+        isDark ? const Color.fromARGB(255, 37, 34, 71) : Colors.white;
     final textColor = isDark ? Colors.white : Colors.black;
 
     return Scaffold(
@@ -118,37 +119,56 @@ class _SplashScreenState extends State<SplashScreen>
                         isDark ? Icons.light_mode : Icons.dark_mode,
                         color: textColor,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          isDark = !isDark;
-                        });
-                      },
+                      onPressed: () => setState(() => isDark = !isDark),
                     ),
                   ),
                 ),
-                const Spacer(),
+                const Spacer(flex: 7),
                 if (!_showBreathing)
-                  Text(
-                    "It's okay to slow down,\nfor a moment.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 24,
-                      color: isDark ? Colors.white70 : Colors.black54,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: DefaultTextStyle(
+                      style: TextStyle(
+                        fontSize: 26,
+                        height: 1.32,
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                        shadows: isDark
+                            ? [
+                                Shadow(
+                                  color:
+                                      const Color(0xFF7DA0FF).withOpacity(0.35),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 4),
+                                ),
+                                Shadow(
+                                  color:
+                                      const Color(0xFF4FA3A5).withOpacity(0.25),
+                                  blurRadius: 32,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      textAlign: TextAlign.center,
+                      child:
+                          const Text("It's okay to slow down,\nfor a moment."),
                     ),
                   )
                 else
                   AnimatedBuilder(
                     animation: _breathController,
-                    builder: (context, child) {
+                    builder: (context, _) {
                       final t = _breathController.value;
                       final scale = _breathScale(t);
+
                       return Column(
                         children: [
                           Transform.scale(
                             scale: scale,
                             child: SizedBox(
-                              width: 170,
-                              height: 170,
+                              width: 180,
+                              height: 180,
                               child: Stack(
                                 children: [
                                   Container(
@@ -156,15 +176,22 @@ class _SplashScreenState extends State<SplashScreen>
                                       shape: BoxShape.circle,
                                       gradient: const RadialGradient(
                                         colors: [
-                                          Color(0xFF7DA0FF),
-                                          Color(0xFF4FA3A5),
+                                          Color(0xFF8AB4FF),
+                                          Color(0xFF5FC5C8)
                                         ],
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: const Color(0xFF5A7FFF).withOpacity(0.35),
-                                          blurRadius: 30,
-                                          spreadRadius: 6,
+                                          color: const Color(0xFF6B8FFF)
+                                              .withOpacity(0.5),
+                                          blurRadius: 60,
+                                          spreadRadius: 20,
+                                        ),
+                                        BoxShadow(
+                                          color: const Color(0xFF4FA3A5)
+                                              .withOpacity(0.4),
+                                          blurRadius: 80,
+                                          spreadRadius: 10,
                                         ),
                                       ],
                                     ),
@@ -173,7 +200,8 @@ class _SplashScreenState extends State<SplashScreen>
                                     child: ClipOval(
                                       child: CustomPaint(
                                         painter: _BreathingNoisePainter(
-                                          seed: (t * 1000).toInt() + _completedCycles * 97,
+                                          seed: (t * 1000).toInt() +
+                                              _completedCycles * 97,
                                           darkMode: isDark,
                                         ),
                                       ),
@@ -183,30 +211,41 @@ class _SplashScreenState extends State<SplashScreen>
                               ),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 40),
                           Text(
                             _breathPrompt(t),
                             style: TextStyle(
-                              fontSize: 28,
+                              fontSize: 32,
                               fontWeight: FontWeight.w700,
                               color: textColor,
+                              letterSpacing: 0.5,
+                              shadows: [
+                                Shadow(
+                                  color:
+                                      const Color(0xFF7DA0FF).withOpacity(0.6),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           Text(
                             "Cycle ${min(_completedCycles + 1, _targetCycles)} of $_targetCycles",
                             style: TextStyle(
-                              fontSize: 14,
-                              color: isDark ? Colors.white70 : Colors.black54,
+                              fontSize: 15,
+                              color: isDark ? Colors.white60 : Colors.black54,
                             ),
                           ),
                         ],
                       );
                     },
                   ),
-                const SizedBox(height: 28),
+                const Spacer(
+                    flex:
+                        5), // ← was 4 → now more space above buttons → effectively shifts buttons up
                 _buildActionButtons(),
-                const Spacer(flex: 2),
+                const SizedBox(height: 280), // ← was 40 → reduced by ~20px
               ],
             ),
           ),
@@ -266,87 +305,112 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Widget _buildActionButtons() {
-    return Transform.translate(
-      offset: const Offset(0, 20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(25),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF5A7FFF),
-                    Color(0xFF4FA3A5),
-                  ],
-                ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Primary button
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF5A7FFF),
+                  Color(0xFF6B8CFF),
+                  Color(0xFF7A9CFF),
+                ],
               ),
-              child: ElevatedButton(
-                onPressed: () {
-                  if (!_showBreathing) {
-                    _startBreathing();
-                  } else {
-                    _openChat();
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF5A7FFF).withOpacity(0.50),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                  spreadRadius: 2,
                 ),
-                child: Text(
-                  !_showBreathing
-                      ? "Continue"
-                      : (_completedCycles >= _targetCycles
-                          ? "Start Chat"
-                          : "Skip To Chat"),
-                  style: const TextStyle(color: Colors.white),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed: () {
+                if (!_showBreathing) {
+                  _startBreathing();
+                } else {
+                  _openChat();
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 38, vertical: 18),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(26)),
+                elevation: 0,
+              ),
+              child: Text(
+                !_showBreathing
+                    ? "Continue"
+                    : (_completedCycles >= _targetCycles
+                        ? "Start Chat"
+                        : "Skip To Chat"),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: 0.3,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(25),
+          ),
+
+          const SizedBox(
+              width:
+                  40), // ← increased from 16 to 24 → more distance between buttons
+
+          // Secondary glass button
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.18 : 0.10),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(26),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(25),
-                    onTap: _openChat,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withOpacity(0.09)
-                            : Colors.black.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(25),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withOpacity(0.26)
-                              : Colors.black.withOpacity(0.15),
-                        ),
-                      ),
-                      child: Text(
-                        _showBreathing ? "End Exercise" : "Skip",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white70 : Colors.black54,
-                        ),
-                      ),
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(isDark ? 0.06 : 0.09),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(
+                      color: (isDark ? Colors.white : Colors.black)
+                          .withOpacity(isDark ? 0.18 : 0.13),
+                      width: 1.1,
+                    ),
+                  ),
+                  child: Text(
+                    _showBreathing ? "End Exercise" : "Skip",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                      letterSpacing: 0.2,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
