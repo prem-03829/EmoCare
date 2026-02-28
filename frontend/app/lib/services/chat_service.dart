@@ -35,7 +35,7 @@ class ChatService {
   static const String _envApiUserId =
       String.fromEnvironment("API_USER_ID", defaultValue: "prem");
   static String get baseUrl =>
-      _envBaseUrl.isNotEmpty ? _envBaseUrl : "http://10.0.2.2:8000";
+      _envBaseUrl.isNotEmpty ? _envBaseUrl : "http://192.168.0.56:8000";
   static String? _accessToken;
   static String? _userId;
 
